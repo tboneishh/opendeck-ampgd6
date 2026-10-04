@@ -56,13 +56,13 @@ impl openaction::GlobalEventHandler for GlobalEventHandler {
 
         let id = event.device.clone();
 
-        if let Some(device) = DEVICES.read().await.get(&event.device) {
-            handle_set_image(device, event)
-                .await
-                .map_err(async |err| handle_error(&id, err).await)
-                .ok();
-        } else {
-            log::error!("Received event for unknown device: {}", event.device);
+        if !DEVICES.read().await.contains_key(&id) {
+            log::error!("Received event for unknown device: {}", id);
+            return Ok(());
+        }
+
+        if let Err(err) = handle_set_image(event).await {
+            handle_error(&id, err).await;
         }
 
         Ok(())
@@ -77,14 +77,16 @@ impl openaction::GlobalEventHandler for GlobalEventHandler {
 
         let id = event.device.clone();
 
-        if let Some(device) = DEVICES.read().await.get(&event.device) {
-            device
-                .set_brightness(event.brightness)
-                .await
-                .map_err(async |err| handle_error(&id, err).await)
-                .ok();
-        } else {
-            log::error!("Received event for unknown device: {}", event.device);
+        let result = match DEVICES.read().await.get(&id) {
+            Some(device) => device.set_brightness(event.brightness).await,
+            None => {
+                log::error!("Received event for unknown device: {}", id);
+                return Ok(());
+            }
+        };
+
+        if let Err(err) = result {
+            handle_error(&id, err).await;
         }
 
         Ok(())
@@ -132,7 +134,9 @@ async fn sigterm() -> Result<(), Box<dyn std::error::Error>> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     simplelog::TermLogger::init(
         simplelog::LevelFilter::Info,
-        simplelog::Config::default(),
+        simplelog::ConfigBuilder::new()
+            .set_time_format_rfc3339()
+            .build(),
         simplelog::TerminalMode::Stdout,
         simplelog::ColorChoice::Never,
     )

@@ -12,6 +12,13 @@ pub const COL_COUNT: usize = 5;
 pub const KEY_COUNT: usize = ROW_COUNT * COL_COUNT;
 pub const ENCODER_COUNT: usize = 0;
 
+/// real key size. was 105 before, firmware crops the extra so icons looked shifted up/left
+pub const IMAGE_SIZE: u32 = 100;
+
+/// manual nudge in px if icons ever look off again, + is right/down
+pub const IMAGE_OFFSET_X: i64 = 0;
+pub const IMAGE_OFFSET_Y: i64 = 0;
+
 #[derive(Debug, Clone)]
 pub enum Kind {
     AMPGD6,
@@ -28,17 +35,11 @@ pub const QUERIES: [DeviceQuery; 1] = [
 ];
 
 /// Returns correct image format for device kind and key
-pub fn get_image_format_for_key(kind: &Kind, _key: u8) -> ImageFormat {
+pub fn get_image_format_for_key(_kind: &Kind, _key: u8) -> ImageFormat {
     // AMPGD6 doesn't need rotation or mirroring - images are displayed normally
-    let size = if kind.protocol_version() == 1 {
-        (105, 105)
-    } else {
-        (105, 105)
-    };
-
     ImageFormat {
         mode: ImageMode::JPEG,
-        size,
+        size: (IMAGE_SIZE as usize, IMAGE_SIZE as usize),
         rotation: ImageRotation::Rot180, // AMPGD6 needs 180° rotation
         mirror: ImageMirroring::None,  // No mirroring needed for AMPGD6
     }
