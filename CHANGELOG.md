@@ -4,7 +4,7 @@
 
 ### Changes
 
-- Plugin ID is now `com.github.tboneishh.opendeck-ampgd6` instead of the original's `st.lynx` one, so it can go in the OpenAction catalogue. Uninstall the old one first and place the page/sleep buttons again
+- Plugin ID is now `com.github.tboneishh.opendeck-ampgd6` instead of the original's `st.lynx` one, so it can go in the OpenAction catalogue. Uninstall the old one first and place the page/sleep buttons again (IF APPLICABLE)
 
 ## [0.3.0] - 2026-10-04
 
