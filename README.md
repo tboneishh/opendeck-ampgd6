@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/6121c276-f6d8-421e-8082-1e2fa6151eb1
+
 ![Plugin Icon](assets/icon.png)
 
 # OpenDeck FIFINE Ampligame D6 Plugin
