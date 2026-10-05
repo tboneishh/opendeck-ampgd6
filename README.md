@@ -11,7 +11,8 @@ An unofficial [OpenDeck](https://github.com/nekename/OpenDeck) plugin for the FI
 This is a redone fork of [shugotekitten/opendeck-ampgd6](https://github.com/shugotekitten/opendeck-ampgd6), done SPECIFICALLY for the D6.
 
 ## Video Showcase
-https://github.com/user-attachments/assets/6121c276-f6d8-421e-8082-1e2fa6151eb1
+<img width="400" height="225" alt="showcase" src="https://github.com/user-attachments/assets/6523fdb0-ea2c-4104-986f-493519d65070" />
+
 
 ## What's different in this fork
 
