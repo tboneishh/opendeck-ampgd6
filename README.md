@@ -1,7 +1,5 @@
 
 
-https://github.com/user-attachments/assets/6121c276-f6d8-421e-8082-1e2fa6151eb1
-
 ![Plugin Icon](assets/icon.png)
 
 # OpenDeck FIFINE Ampligame D6 Plugin
@@ -11,6 +9,9 @@ An unofficial [OpenDeck](https://github.com/nekename/OpenDeck) plugin for the FI
 > **This is a Linux plugin.** It's built, tested and used on Linux. Mac and Windows builds are included so the D6 gets basic support there too (icons and key presses), but the extra buttons and fixes from this fork probably won't work on them. See [Platforms](#platforms).
 
 This is a redone fork of [shugotekitten/opendeck-ampgd6](https://github.com/shugotekitten/opendeck-ampgd6), done SPECIFICALLY for the D6.
+
+## Video Showcase
+https://github.com/user-attachments/assets/6121c276-f6d8-421e-8082-1e2fa6151eb1
 
 ## What's different in this fork
 
