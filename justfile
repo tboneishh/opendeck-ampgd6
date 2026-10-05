@@ -1,4 +1,4 @@
-id := "st.lynx.plugins.opendeck-ampgd6.sdPlugin"
+id := "com.github.tboneishh.opendeck-ampgd6.sdPlugin"
 
 release: bump package tag
 

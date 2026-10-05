@@ -68,7 +68,7 @@ If you're on Mac or Windows and something works (or doesn't), open an issue.
 3. Linux only: copy [40-opendeck-ampgd6.rules](./40-opendeck-ampgd6.rules) into `/etc/udev/rules.d/` and run `sudo udevadm control --reload-rules`
 4. Unplug and replug the device, then restart OpenDeck
 
-If you had the original plugin installed, uninstall it first, then load this one.
+If you had the original plugin (or this one before 0.3.1) installed, uninstall it first, then load this one. 0.3.1 changed the plugin ID to `com.github.tboneishh.opendeck-ampgd6`, so any page or sleep buttons need to be placed again.
 
 ## Device specifications
 

@@ -8,9 +8,9 @@ use std::{
 use base64::prelude::*;
 use openaction::{AppearEvent, KeyEvent, OutboundEventManager};
 
-pub const NEXT_UUID: &str = "st.lynx.plugins.opendeck-ampgd6.nextpage";
-pub const PREV_UUID: &str = "st.lynx.plugins.opendeck-ampgd6.prevpage";
-pub const COUNTER_UUID: &str = "st.lynx.plugins.opendeck-ampgd6.pagecounter";
+pub const NEXT_UUID: &str = "com.github.tboneishh.opendeck-ampgd6.nextpage";
+pub const PREV_UUID: &str = "com.github.tboneishh.opendeck-ampgd6.prevpage";
+pub const COUNTER_UUID: &str = "com.github.tboneishh.opendeck-ampgd6.pagecounter";
 
 pub async fn key_down(event: KeyEvent, outbound: &mut OutboundEventManager) {
     let pages = list_pages(&event.device);

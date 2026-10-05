@@ -2,8 +2,8 @@
   "Name": "FIFINE Ampligame D6",
   "Description": "Device support plugin for FIFINE Ampligame D6",
   "Author": "TBone",
-  "Version": "0.3.0",
-  "PluginUUID": "st.lynx.plugins.opendeck-ampgd6",
+  "Version": "0.3.1",
+  "PluginUUID": "com.github.tboneishh.opendeck-ampgd6",
   "CodePathLin": "opendeck-ampgd6-linux",
   "CodePathMac": "opendeck-ampgd6-mac",
   "CodePathWin": "opendeck-ampgd6-win.exe",
@@ -25,7 +25,7 @@
   "Actions": [
     {
       "Name": "Previous Page",
-      "UUID": "st.lynx.plugins.opendeck-ampgd6.prevpage",
+      "UUID": "com.github.tboneishh.opendeck-ampgd6.prevpage",
       "Icon": "assets/actions/prev",
       "Tooltip": "Go to the previous page (profile), wraps around",
       "States": [
@@ -41,7 +41,7 @@
     },
     {
       "Name": "Next Page",
-      "UUID": "st.lynx.plugins.opendeck-ampgd6.nextpage",
+      "UUID": "com.github.tboneishh.opendeck-ampgd6.nextpage",
       "Icon": "assets/actions/next",
       "Tooltip": "Go to the next page (profile), wraps around",
       "States": [
@@ -57,7 +57,7 @@
     },
     {
       "Name": "Page Counter",
-      "UUID": "st.lynx.plugins.opendeck-ampgd6.pagecounter",
+      "UUID": "com.github.tboneishh.opendeck-ampgd6.pagecounter",
       "Icon": "assets/actions/counter",
       "Tooltip": "Shows the current page. Press to go back to page 1",
       "States": [
@@ -74,7 +74,7 @@
 ,
     {
       "Name": "Sleep",
-      "UUID": "st.lynx.plugins.opendeck-ampgd6.sleep",
+      "UUID": "com.github.tboneishh.opendeck-ampgd6.sleep",
       "Icon": "assets/actions/sleep",
       "Tooltip": "Turns the screen off. Press any key to turn it back on",
       "States": [

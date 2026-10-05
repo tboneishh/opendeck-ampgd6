@@ -11,7 +11,7 @@ use openaction::KeyEvent;
 
 use crate::{DEVICES, mappings::COL_COUNT};
 
-pub const UUID: &str = "st.lynx.plugins.opendeck-ampgd6.sleep";
+pub const UUID: &str = "com.github.tboneishh.opendeck-ampgd6.sleep";
 
 #[derive(Default)]
 struct State {

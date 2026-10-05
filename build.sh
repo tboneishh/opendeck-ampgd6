@@ -5,7 +5,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-ID="st.lynx.plugins.opendeck-ampgd6.sdPlugin"
+ID="com.github.tboneishh.opendeck-ampgd6.sdPlugin"
 IMAGE="ghcr.io/rust-cross/cargo-zigbuild:sha-eba2d7e"
 PLUGIN_DIR="$HOME/.config/opendeck/plugins/$ID"
 
