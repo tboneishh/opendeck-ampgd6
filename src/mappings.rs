@@ -12,10 +12,10 @@ pub const COL_COUNT: usize = 5;
 pub const KEY_COUNT: usize = ROW_COUNT * COL_COUNT;
 pub const ENCODER_COUNT: usize = 0;
 
-/// real key size. was 105 before, firmware crops the extra so icons looked shifted up/left
+/// key size, 105 made stuff look off
 pub const IMAGE_SIZE: u32 = 100;
 
-/// manual nudge in px if icons ever look off again, + is right/down
+/// nudge if stuff looks off
 pub const IMAGE_OFFSET_X: i64 = 0;
 pub const IMAGE_OFFSET_Y: i64 = 0;
 

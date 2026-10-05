@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# builds linux/mac/windows and zips it to build/opendeck-ampgd6.plugin.zip
-# needs podman or docker
-#
+# builds everything, needs podman or docker
 # ./build.sh [--version X.Y.Z] [--install]
-#   --version  bump version in manifest.json + Cargo.toml
-#   --install  copy into local opendeck plugins, restart opendeck after
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -64,7 +60,7 @@ if $install; then
     echo "==> Installing into $PLUGIN_DIR"
     mkdir -p "$PLUGIN_DIR"
     cp -r "build/$ID/assets" "$PLUGIN_DIR/"
-    # cp then mv, plain cp fails if opendeck is running it (text file busy)
+    # plain cp breaks if its running
     for file in manifest.json opendeck-ampgd6-linux opendeck-ampgd6-mac opendeck-ampgd6-win.exe; do
         cp "build/$ID/$file" "$PLUGIN_DIR/$file.new"
         mv -f "$PLUGIN_DIR/$file.new" "$PLUGIN_DIR/$file"

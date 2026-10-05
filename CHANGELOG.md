@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0] - 2026-10-04
+
+### Features
+
+- Page switcher: next page, previous page and a page counter
+- Sleep button: turns the screen off, any key wakes it back up
+- Watchdog that USB resets the D6 when its key input freezes (Linux only)
+- Mac and Windows builds for basic support, extras are Linux only
+
+### Bug Fixes
+
+- Fix keys getting stuck looking pressed after a quick double press
+
 ## [0.2.2] - 2026-04-19
 
 ### 🐛 Bug Fixes

@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
-    sync::{Arc, LazyLock, Mutex},
+    sync::{Arc, LazyLock, Mutex, atomic::AtomicU8},
     time::{Duration, Instant},
 };
 
@@ -106,7 +106,9 @@ pub async fn device_task(candidate: CandidateDevice, token: CancellationToken) {
     }
 
     reset_render_state(&candidate.id);
+    crate::sleep::forget(&candidate.id);
     DEVICES.write().await.insert(candidate.id.clone(), device);
+    crate::watchdog::register(&candidate.id, &candidate.dev);
 
     tokio::select! {
         _ = device_events_task(&candidate) => {},
@@ -222,6 +224,10 @@ async fn device_events_task(candidate: &CandidateDevice) -> Result<(), MirajazzE
         let now = Instant::now();
         last_events.retain(|(_, time)| now.duration_since(*time) < dedup_window);
 
+        if !updates.is_empty() {
+            crate::watchdog::note_input(&candidate.id);
+        }
+
         for update in updates {
             log::info!("New update: {:#?}", update);
 
@@ -244,8 +250,24 @@ async fn device_events_task(candidate: &CandidateDevice) -> Result<(), MirajazzE
                 continue;
             }
 
+            // a press forgets the last release for that key (and the other way round),
+            // otherwise a quick re-press within the window loses its key up and the button sticks
+            let opposite = match event_key {
+                EventKey::ButtonDown(key) => Some(EventKey::ButtonUp(key)),
+                EventKey::ButtonUp(key) => Some(EventKey::ButtonDown(key)),
+                EventKey::EncoderDown(enc) => Some(EventKey::EncoderUp(enc)),
+                EventKey::EncoderUp(enc) => Some(EventKey::EncoderDown(enc)),
+                EventKey::EncoderTwist(..) => None,
+            };
+            if let Some(opposite) = opposite {
+                last_events.retain(|(key, _)| *key != opposite);
+            }
+
             // Add to deduplication cache
             last_events.insert((event_key, now));
+
+            // wake up first if the sleep button turned the screen off
+            crate::sleep::note_input(&candidate.id, &update).await;
 
             let id = candidate.id.clone();
 
@@ -279,16 +301,17 @@ async fn device_events_task(candidate: &CandidateDevice) -> Result<(), MirajazzE
     Ok(())
 }
 
-// panel needs ~35ms per key and blocks until the last one is drawn.
-// so just stream stuff as it comes in, batching only made it slower
+// panel is slow af per key and only updates on STP, so send stuff asap and STP once at the end
 
-/// clear all waits this long for the new profile before blanking leftovers
+/// how long before leftover keys get blanked
 const CLEAR_ALL_GRACE: Duration = Duration::from_millis(300);
-/// wait this long for more images before sending STP
-const COMMIT_GRACE: Duration = Duration::from_millis(10);
-/// 80 looks the same as 90 at 100px, smaller files
+/// wait this long for more stuff before STP
+const COMMIT_QUIET: Duration = Duration::from_millis(60);
+/// dont wait longer than this tho
+const COMMIT_MAX: Duration = Duration::from_millis(400);
+/// looks the same, smaller
 const JPEG_QUALITY: u8 = 80;
-/// v1 = 512 byte packets
+/// packet size
 const IMAGE_REPORT_SIZE: usize = 512;
 
 #[derive(Clone)]
@@ -299,13 +322,16 @@ enum KeyOp {
 
 #[derive(Default)]
 struct RenderState {
-    /// latest change per key, not sent yet
+    /// stuff waiting to go out
     pending: [Option<KeyOp>; KEY_COUNT],
-    /// keys to blank when clear_all_at hits, unless they get an image first
+    /// keys that get blanked if nothing shows up for them
     clear_all_keys: [bool; KEY_COUNT],
     clear_all_at: Option<Instant>,
-    /// whats on each key right now (none = blank), kept so we can redraw after a clear all
+    /// whats on screen rn
     shown: [Option<(u64, Arc<Vec<u8>>)>; KEY_COUNT],
+    last_queued: Option<Instant>,
+    /// whole page is in, just send it
+    page_complete: bool,
     worker_running: bool,
     wake: Arc<Notify>,
 }
@@ -313,15 +339,16 @@ struct RenderState {
 static RENDER_STATES: LazyLock<Mutex<HashMap<String, RenderState>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// call on connect, device gets wiped so forget what we think is on it
+/// device got wiped, forget everything
 pub fn reset_render_state(id: &str) {
     RENDER_STATES.lock().unwrap().remove(id);
 }
 
-/// queue a change for one key, or all keys if position is none
+/// queue stuff for a key (or all of them)
 fn queue_op(id: &str, position: Option<u8>, op: KeyOp) {
     let mut states = RENDER_STATES.lock().unwrap();
     let state = states.entry(id.to_string()).or_default();
+    state.last_queued = Some(Instant::now());
 
     match position {
         Some(position) if (position as usize) < KEY_COUNT => {
@@ -333,13 +360,18 @@ fn queue_op(id: &str, position: Option<u8>, op: KeyOp) {
             return;
         }
         None => {
-            // dont blank yet, new profile images usually show up right after this
+            // dont blank yet, new stuff is coming
             state.pending = Default::default();
             state.clear_all_keys = [true; KEY_COUNT];
             state.clear_all_at = Some(Instant::now() + CLEAR_ALL_GRACE);
+            state.page_complete = false;
         }
     }
 
+    kick_worker(id, state);
+}
+
+fn kick_worker(id: &str, state: &mut RenderState) {
     if state.worker_running {
         state.wake.notify_one();
     } else {
@@ -348,17 +380,59 @@ fn queue_op(id: &str, position: Option<u8>, op: KeyOp) {
     }
 }
 
-enum Next {
-    Send(u8, KeyOp),
-    ClearAll,
-    WaitUntil(Instant),
-    Idle,
+/// last brightness opendeck asked for, needed after a usb reset
+pub static BRIGHTNESS: AtomicU8 = AtomicU8::new(50);
+
+/// device got usb reset or woke from sleep, turn the screen on and redraw everything
+pub async fn reinit_after_reset(id: &str) {
+    if let Some(device) = DEVICES.read().await.get(id) {
+        // reset while the sleep button is on, keep it dark. waking redraws anyway
+        if crate::sleep::is_asleep(id) {
+            device.sleep().await.ok();
+            return;
+        }
+
+        let mut dis = vec![0x00, 0x43, 0x52, 0x54, 0x00, 0x00, 0x44, 0x49, 0x53];
+        device.write_extended_data(&mut dis).await.ok();
+        device.set_brightness(BRIGHTNESS.load(std::sync::atomic::Ordering::Relaxed)).await.ok();
+    }
+
+    let mut states = RENDER_STATES.lock().unwrap();
+    let Some(state) = states.get_mut(id) else {
+        return;
+    };
+
+    // no clue whats on screen, resend all of it (stuff that changed while asleep wins)
+    for key in 0..KEY_COUNT {
+        let shown = state.shown[key].take();
+        if state.pending[key].is_none() {
+            state.pending[key] = Some(match shown {
+                Some((hash, data)) => KeyOp::Image { data, hash },
+                None => KeyOp::Clear,
+            });
+        }
+        state.shown[key] = Some((0, Arc::new(vec![])));
+    }
+    state.last_queued = Some(Instant::now());
+    kick_worker(id, state);
 }
 
-/// what the worker does next. none = nothing left, worker stops
+enum Next {
+    Send(u8, KeyOp),
+    WaitUntil(Instant),
+    Idle(Instant),
+}
+
+/// figures out whats next, none = done
 fn next_step(id: &str, dirty: bool) -> Option<Next> {
     let mut states = RENDER_STATES.lock().unwrap();
     let state = states.get_mut(id)?;
+
+    // drawing would turn the screen back on, keep it queued till wake
+    if crate::sleep::is_asleep(id) {
+        state.worker_running = false;
+        return None;
+    }
 
     if let Some(deadline) = state.clear_all_at {
         if Instant::now() >= deadline {
@@ -371,7 +445,13 @@ fn next_step(id: &str, dirty: bool) -> Option<Next> {
         }
     }
 
-    // skip keys that already show the right thing
+    // got everything for the page?
+    if state.clear_all_at.is_some() && state.clear_all_keys.iter().all(|flagged| !flagged) {
+        state.clear_all_at = None;
+        state.page_complete = true;
+    }
+
+    // skip stuff thats already there
     for key in 0..KEY_COUNT {
         let noop = match (&state.pending[key], &state.shown[key]) {
             (Some(KeyOp::Image { hash, .. }), Some((shown, _))) => hash == shown,
@@ -383,33 +463,7 @@ fn next_step(id: &str, dirty: bool) -> Option<Next> {
         }
     }
 
-    // one clear takes as long as a full clear all. if lots of keys need clearing
-    // just nuke everything and redraw whatever should stay
-    let clears = (0..KEY_COUNT)
-        .filter(|&key| matches!(state.pending[key], Some(KeyOp::Clear)))
-        .count();
-    if clears >= 2 {
-        let keep: Vec<usize> = (0..KEY_COUNT)
-            .filter(|&key| state.shown[key].is_some() && state.pending[key].is_none())
-            .collect();
-
-        if keep.len() + 1 < clears {
-            for key in keep {
-                let (hash, data) = state.shown[key].clone().unwrap();
-                state.pending[key] = Some(KeyOp::Image { data, hash });
-            }
-            for op in state.pending.iter_mut() {
-                if matches!(op, Some(KeyOp::Clear)) {
-                    *op = None;
-                }
-            }
-            state.shown = Default::default();
-
-            return Some(Next::ClearAll);
-        }
-    }
-
-    // images first so clears pile up and get merged above
+    // images first
     let key = (0..KEY_COUNT)
         .find(|&key| matches!(state.pending[key], Some(KeyOp::Image { .. })))
         .or_else(|| (0..KEY_COUNT).find(|&key| state.pending[key].is_some()));
@@ -424,19 +478,24 @@ fn next_step(id: &str, dirty: bool) -> Option<Next> {
         return Some(Next::Send(key as u8, op));
     }
 
+    if dirty {
+        if std::mem::take(&mut state.page_complete) {
+            return Some(Next::Idle(Instant::now()));
+        }
+        let last = state.last_queued.unwrap_or_else(Instant::now);
+        return Some(Next::Idle(last + COMMIT_QUIET));
+    }
+
     if let Some(deadline) = state.clear_all_at {
         return Some(Next::WaitUntil(deadline));
     }
 
-    if dirty {
-        return Some(Next::Idle);
-    }
-
+    state.page_complete = false;
     state.worker_running = false;
     None
 }
 
-/// sends queued changes one at a time, STP once nothing new comes in
+/// sends everything, STP at the end
 async fn render_worker(id: String, wake: Arc<Notify>) {
     let mut dirty = false;
     let mut burst: Option<(Instant, usize)> = None;
@@ -446,40 +505,28 @@ async fn render_worker(id: String, wake: Arc<Notify>) {
             Next::Send(key, op) => {
                 let started = burst.get_or_insert((Instant::now(), 0));
                 started.1 += 1;
+                dirty = true;
 
-                if matches!(op, KeyOp::Image { .. }) {
-                    dirty = true;
-                }
-
-                match DEVICES.read().await.get(&id) {
+                let result = match DEVICES.read().await.get(&id) {
                     Some(device) => send_op(device, opendeck_to_device(key), &op).await,
                     None => break,
-                }
-            }
-            Next::ClearAll => {
-                let started = burst.get_or_insert((Instant::now(), 0));
-                started.1 += 1;
-
-                match DEVICES.read().await.get(&id) {
-                    Some(device) => device.clear_button_image(0xff).await,
-                    None => break,
-                }
+                };
+                // tiny breather, the d6 drops key input if you hammer it
+                tokio::time::sleep(Duration::from_millis(1)).await;
+                result
             }
             Next::WaitUntil(deadline) => {
-                if dirty {
-                    // commit before waiting around
-                    let result = commit(&id).await;
-                    dirty = false;
-                    log_burst(&mut burst);
-                    result
-                } else {
-                    let _ = tokio::time::timeout_at(deadline.into(), wake.notified()).await;
-                    Ok(())
-                }
+                let _ = tokio::time::timeout_at(deadline.into(), wake.notified()).await;
+                Ok(())
             }
-            Next::Idle => {
-                if tokio::time::timeout(COMMIT_GRACE, wake.notified()).await.is_ok() {
-                    continue; // more came in, keep going
+            Next::Idle(quiet_at) => {
+                let cap = burst.map_or(quiet_at, |(started, _)| started + COMMIT_MAX);
+                let deadline = quiet_at.min(cap);
+
+                if Instant::now() < deadline {
+                    // wait for the rest
+                    let _ = tokio::time::timeout_at(deadline.into(), wake.notified()).await;
+                    continue;
                 }
 
                 let result = commit(&id).await;
@@ -490,7 +537,7 @@ async fn render_worker(id: String, wake: Arc<Notify>) {
         };
 
         if let Err(err) = result {
-            // no idea whats on screen now, start over
+            // something broke, start over
             reset_render_state(&id);
             handle_error(&id, err).await;
             return;
@@ -504,14 +551,19 @@ fn log_burst(burst: &mut Option<(Instant, usize)>) {
     }
 }
 
-/// send one change, device draws it right away
+/// blank key. CLE skips STP and looks janky so just send black
+static BLACK_FRAME: LazyLock<Vec<u8>> = LazyLock::new(|| {
+    encode_image(DynamicImage::ImageRgb8(RgbImage::new(144, 144))).unwrap_or_default()
+});
+
+/// upload one key
 async fn send_op(device: &Device, key: u8, op: &KeyOp) -> Result<(), MirajazzError> {
-    let data = match op {
-        KeyOp::Clear => return device.clear_button_image(key).await,
+    let data: &[u8] = match op {
+        KeyOp::Clear => &BLACK_FRAME,
         KeyOp::Image { data, .. } => data,
     };
 
-    // same BAT upload mirajazz does, but skips its cache so it goes out now
+    // same as mirajazz but sends right away
     let mut header = vec![
         0x00,
         0x43,
@@ -543,7 +595,7 @@ async fn send_op(device: &Device, key: u8, op: &KeyOp) -> Result<(), MirajazzErr
     Ok(())
 }
 
-/// STP = commit whatever was uploaded
+/// show it
 async fn commit(id: &str) -> Result<(), MirajazzError> {
     let devices = DEVICES.read().await;
     let Some(device) = devices.get(id) else {
@@ -554,7 +606,7 @@ async fn commit(id: &str) -> Result<(), MirajazzError> {
     device.write_extended_data(&mut stop).await
 }
 
-/// resize to key size, rotate for the panel, encode jpeg
+/// resize, flip, jpeg
 fn encode_image(image: DynamicImage) -> Result<Vec<u8>, MirajazzError> {
     let format = get_image_format_for_key(&Kind::AMPGD6, 0);
     let (width, height) = (format.size.0 as u32, format.size.1 as u32);

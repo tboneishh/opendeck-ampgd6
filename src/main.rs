@@ -12,6 +12,9 @@ use tokio::signal::unix::{SignalKind, signal};
 mod device;
 mod inputs;
 mod mappings;
+mod pages;
+mod sleep;
+mod watchdog;
 mod watcher;
 
 pub static DEVICES: LazyLock<RwLock<HashMap<String, Device>>> =
@@ -78,7 +81,14 @@ impl openaction::GlobalEventHandler for GlobalEventHandler {
         let id = event.device.clone();
 
         let result = match DEVICES.read().await.get(&id) {
-            Some(device) => device.set_brightness(event.brightness).await,
+            Some(device) => {
+                device::BRIGHTNESS.store(event.brightness, std::sync::atomic::Ordering::Relaxed);
+                // stays dark if the sleep button is on, waking puts it back
+                if sleep::is_asleep(&id) {
+                    return Ok(());
+                }
+                device.set_brightness(event.brightness).await
+            }
             None => {
                 log::error!("Received event for unknown device: {}", id);
                 return Ok(());
@@ -94,7 +104,29 @@ impl openaction::GlobalEventHandler for GlobalEventHandler {
 }
 
 struct ActionEventHandler {}
-impl openaction::ActionEventHandler for ActionEventHandler {}
+impl openaction::ActionEventHandler for ActionEventHandler {
+    async fn key_down(
+        &self,
+        event: KeyEvent,
+        outbound: &mut OutboundEventManager,
+    ) -> EventHandlerResult {
+        if event.action == sleep::UUID {
+            sleep::key_down(event).await;
+        } else {
+            pages::key_down(event, outbound).await;
+        }
+        Ok(())
+    }
+
+    async fn will_appear(
+        &self,
+        event: AppearEvent,
+        outbound: &mut OutboundEventManager,
+    ) -> EventHandlerResult {
+        pages::will_appear(event, outbound).await;
+        Ok(())
+    }
+}
 
 async fn shutdown() {
     let tokens = TOKENS.write().await;
