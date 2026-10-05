@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# builds everything, needs podman or docker
+# builds everything + the mac/win lite zip, needs podman or docker
 # ./build.sh [--version X.Y.Z] [--install]
 set -euo pipefail
 
@@ -47,6 +47,10 @@ run "cargo zigbuild --release --target universal2-apple-darwin --target-dir targ
 echo "==> Building Windows"
 run "apt-get update -qq && apt-get install -y -qq mingw-w64 > /dev/null 2>&1 && cargo zigbuild --release --target x86_64-pc-windows-gnu --target-dir target/plugin-win"
 
+echo "==> Building Mac + Windows lite (no page switcher)"
+run "cargo zigbuild --release --no-default-features --target universal2-apple-darwin --target-dir target/plugin-mac-lite"
+run "apt-get update -qq && apt-get install -y -qq mingw-w64 > /dev/null 2>&1 && cargo zigbuild --release --no-default-features --target x86_64-pc-windows-gnu --target-dir target/plugin-win-lite"
+
 echo "==> Packaging"
 rm -rf build
 mkdir -p "build/$ID"
@@ -55,6 +59,22 @@ cp target/plugin-linux/x86_64-unknown-linux-gnu/release/opendeck-ampgd6 "build/$
 cp target/plugin-mac/universal2-apple-darwin/release/opendeck-ampgd6 "build/$ID/opendeck-ampgd6-mac"
 cp target/plugin-win/x86_64-pc-windows-gnu/release/opendeck-ampgd6.exe "build/$ID/opendeck-ampgd6-win.exe"
 (cd build && python3 -c "import shutil; shutil.make_archive('opendeck-ampgd6.plugin', 'zip', '.', '$ID')")
+
+# lite: mac/win only, without the linux only stuff
+mkdir -p "build/lite/$ID/assets/actions"
+cp assets/icon.* "build/lite/$ID/assets"
+cp assets/actions/sleep.svg "build/lite/$ID/assets/actions"
+python3 - "build/lite/$ID/manifest.json" <<'PY'
+import json, sys
+manifest = json.load(open("manifest.json"))
+manifest["Actions"] = [a for a in manifest["Actions"] if not a["UUID"].endswith(("page", "pagecounter"))]
+manifest["OS"] = [os for os in manifest["OS"] if os["Platform"] != "linux"]
+manifest.pop("CodePathLin", None)
+json.dump(manifest, open(sys.argv[1], "w"), indent=2)
+PY
+cp target/plugin-mac-lite/universal2-apple-darwin/release/opendeck-ampgd6 "build/lite/$ID/opendeck-ampgd6-mac"
+cp target/plugin-win-lite/x86_64-pc-windows-gnu/release/opendeck-ampgd6.exe "build/lite/$ID/opendeck-ampgd6-win.exe"
+(cd build/lite && python3 -c "import shutil; shutil.make_archive('../opendeck-ampgd6-macwin.plugin', 'zip', '.', '$ID')")
 
 if $install; then
     echo "==> Installing into $PLUGIN_DIR"
@@ -68,4 +88,4 @@ if $install; then
     echo "Restart OpenDeck to load the new version"
 fi
 
-echo "==> Done: build/opendeck-ampgd6.plugin.zip"
+echo "==> Done: build/opendeck-ampgd6.plugin.zip (everything) and build/opendeck-ampgd6-macwin.plugin.zip (mac/win lite)"

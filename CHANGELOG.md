@@ -8,6 +8,7 @@
 - Sleep button: turns the screen off, any key wakes it back up
 - Watchdog that USB resets the D6 when its key input freezes (Linux only)
 - Mac and Windows builds for basic support, extras are Linux only
+- Separate lighter Mac/Windows zip without the Linux only extras
 
 ### Bug Fixes
 

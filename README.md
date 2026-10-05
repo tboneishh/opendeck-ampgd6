@@ -61,7 +61,9 @@ If you're on Mac or Windows and something works (or doesn't), open an issue.
 
 ## Installation
 
-1. Download `opendeck-ampgd6.plugin.zip` from the [releases](../../releases) page
+1. Download a zip from the [releases](../../releases) page:
+   - `opendeck-ampgd6.plugin.zip`: everything, all platforms. Get this one on Linux
+   - `opendeck-ampgd6-macwin.plugin.zip`: lighter Mac/Windows only build with just the sleep button, no page switcher or freeze fix since those don't work there anyway
 2. In OpenDeck: Plugins -> Install from file
 3. Linux only: copy [40-opendeck-ampgd6.rules](./40-opendeck-ampgd6.rules) into `/etc/udev/rules.d/` and run `sudo udevadm control --reload-rules`
 4. Unplug and replug the device, then restart OpenDeck
@@ -79,7 +81,7 @@ If you had the original plugin installed, uninstall it first, then load this one
 You need [podman](https://podman.io) or Docker. Everything else runs in a container.
 
 ```sh
-./build.sh                    # build linux, mac and windows, zip to build/
+./build.sh                    # build linux, mac and windows + the mac/win lite zip, all in build/
 ./build.sh --install          # same, then install into your local OpenDeck
 ./build.sh --version 0.3.0    # bump the version first
 ```

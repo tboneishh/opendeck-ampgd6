@@ -4,18 +4,24 @@ version = "0.3.0"
 edition = "2024"
 
 [dependencies]
-async-hid = { version = "0.4.4", default-features = false, features = ["tokio"] }
-base64 = "0.22"
+base64 = { version = "0.22", optional = true }
 data-url = "0.3.1"
 futures-lite = "2.6.0"
 image = { version = "0.25.6", default-features = false, features = ["bmp", "jpeg"] }
 log = "0.4.27"
 mirajazz = "0.9.0"
 openaction = "1.1.5"
-serde_json = "1"
+serde_json = { version = "1", optional = true }
 simplelog = "0.12.2"
 tokio = { version = "1.44.2", features = ["full"] }
 tokio-util = { version = "0.7.15", features = ["full"] }
 
+[features]
+default = ["pages"]
+# page switcher, needs opendecks dbus to switch so its off in the mac/win lite build
+pages = ["dep:base64", "dep:serde_json"]
+
+# freeze watchdog
 [target.'cfg(target_os = "linux")'.dependencies]
+async-hid = { version = "0.4.4", default-features = false, features = ["tokio"] }
 libc = "0.2"

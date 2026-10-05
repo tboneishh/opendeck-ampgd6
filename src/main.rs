@@ -12,6 +12,7 @@ use tokio::signal::unix::{SignalKind, signal};
 mod device;
 mod inputs;
 mod mappings;
+#[cfg(feature = "pages")]
 mod pages;
 mod sleep;
 mod watchdog;
@@ -112,9 +113,13 @@ impl openaction::ActionEventHandler for ActionEventHandler {
     ) -> EventHandlerResult {
         if event.action == sleep::UUID {
             sleep::key_down(event).await;
-        } else {
-            pages::key_down(event, outbound).await;
+            return Ok(());
         }
+
+        #[cfg(feature = "pages")]
+        pages::key_down(event, outbound).await;
+        #[cfg(not(feature = "pages"))]
+        let _ = outbound;
         Ok(())
     }
 
@@ -123,7 +128,10 @@ impl openaction::ActionEventHandler for ActionEventHandler {
         event: AppearEvent,
         outbound: &mut OutboundEventManager,
     ) -> EventHandlerResult {
+        #[cfg(feature = "pages")]
         pages::will_appear(event, outbound).await;
+        #[cfg(not(feature = "pages"))]
+        let _ = (event, outbound);
         Ok(())
     }
 }
